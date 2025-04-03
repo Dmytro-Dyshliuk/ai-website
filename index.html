@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STONE ISLAND SNAKE | 10 рівнів</title>
+    <style>
+        :root {
+            --primary: #FF8C00;
+            --secondary: #808000;
+            --bg-dark: #121212;
+            --text-light: #fff;
+            --snake-head: #FF8C00;
+            --snake-body: #555;
+            --food-color: #808000;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .game-container {
+            position: relative;
+            text-align: center;
+            padding: 20px;
+            max-width: 100%;
+        }
+
+        h1 {
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--primary);
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+
+        canvas {
+            border: 3px solid var(--primary);
+            border-radius: 8px;
+            background-color: #1A1A1A;
+            box-shadow: 0 0 20px rgba(255, 140, 0, 0.3);
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            font-size: 1.2rem;
+            gap: 10px;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: 1px solid var(--primary);
+            flex: 1;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 50px;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px var(--primary);
+        }
+
+        .customization {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .skin-option {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .skin-option:hover {
+            transform: scale(1.1);
+        }
+
+        .skin-option.selected {
+            border-color: var(--primary);
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        @keyframes food-pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes snake-move {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.8rem; }
+            canvas { width: 300px; height: 300px; }
+            .stat-box { padding: 5px 10px; font-size: 1rem; }
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="game-container">
+        <h1>STONE ISLAND SNAKE</h1>
+        <div class="stats">
+            <div class="stat-box">Рівень: <span id="level">1</span></div>
+            <div class="stat-box">Рахунок: <span id="score">0</span></div>
+            <div class="stat-box">Рекорд: <span id="highscore">0</span></div>
+        </div>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div class="controls">
+            <button class="btn" id="startButton">СТАРТ</button>
+            <button class="btn" id="restartButton">РЕСТАРТ</button>
+        </div>
+        <div class="customization">
+            <div class="skin-option selected" data-skin="default" style="background: #FF8C00;"></div>
+            <div class="skin-option" data-skin="neon" style="background: #00FF87;"></div>
+            <div class="skin-option" data-skin="gold" style="background: #FFD700;"></div>
+            <div class="skin-option" data-skin="camo" style="background: #555;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Глобальні змінні
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+        const levelElement = document.getElementById('level');
+        const scoreElement = document.getElementById('score');
+        const highscoreElement = document.getElementById('highscore');
+        const skinOptions = document.querySelectorAll('.skin-option');
+        
+        // Налаштування гри
+        const boxSize = 20;
+        let snake = [];
+        let direction = 'right';
+        let food = {};
+        let obstacles = [];
+        let gameInterval;
+        let score = 0;
+        let highscore = localStorage.getItem('snakeHighScore') || 0;
+        let level = 1;
+        let currentSkin = 'default';
+        
+        // Налаштування рівнів
+        const levels = [
+            { speed: 180, obstacles: 0, name: "Початківець" },
+            { speed: 160, obstacles: 3, name: "Легкий" },
+            { speed: 140, obstacles: 5, name: "Середній" },
+            { speed: 120, obstacles: 8, name: "Важкий" },
+            { speed: 100, obstacles: 12, name: "Експерт" },
+            { speed: 90, obstacles: 15, name: "Майстер" },
+            { speed: 80, obstacles: 18, name: "Легенда" },
+            { speed: 70, obstacles: 22, name: "Неможливий" },
+            { speed: 60, obstacles: 26, name: "Божественний" },
+            { speed: 50, obstacles: 30, name: "Stone Island" }
+        ];
+        
+        // Кольори для скинів
+        const skins = {
+            default: { head: '#FF8C00', body: '#555', food: '#808000', obstacle: '#333' },
+            neon: { head: '#00FF87', body: '#00B4FF', food: '#FF00E4', obstacle: '#7700FF' },
+            gold: { head: '#FFD700', body: '#FFA500', food: '#FF4500', obstacle: '#8B4513' },
+            camo: { head: '#555', body: '#333', food: '#808000', obstacle: '#2F4F4F' }
+        };
+        
+        // Ініціалізація гри
+        function initGame() {
+            const currentLevel = levels[level - 1];
+            
+            snake = [
+                { x: 9 * boxSize, y: 10 * boxSize },
+                { x: 8 * boxSize, y: 10 * boxSize },
+                { x: 7 * boxSize, y: 10 * boxSize }
+            ];
+            
+            direction = 'right';
+            generateFood();
+            generateObstacles();
+            draw();
+        }
+        
+        // Генерація їжі
+        function generateFood() {
+            let isValidPosition;
+            do {
+                isValidPosition = true;
+                food = {
+                    x: Math.floor(Math.random() * (canvas.width / boxSize)) * boxSize,
+                    y: Math.floor(Math.random() * (canvas.height / boxSize)) * boxSize
+                };
+                
+                // Перевірка на змійку
+                for (let segment of snake) {
+                    if (segment.x === food.x && segment.y === food.y) {
+                        isValidPosition = false;
+                        break;
+                    }
+                }
+                
+                // Перевірка на перешкоди
+                for (let obstacle of obstacles) {
+                    if (obstacle.x === food.x && obstacle.y === food.y) {
+                        isValidPosition = false;
+                        break;
+                    }
+                }
+            } while (!isValidPosition);
+        }
+        
+        // Генерація перешкод
+        function generateObstacles() {
+            obstacles = [];
+            const currentLevel = levels[level - 1];
+            
+            for (let i = 0; i < currentLevel.obstacles; i++) {
+                let obstacle;
+                let isValidPosition;
+                
+                do {
+                    isValidPosition = true;
+                    obstacle = {
+                        x: Math.floor(Math.random() * (canvas.width / boxSize)) * boxSize,
+                        y: Math.floor(Math.random() * (canvas.height / boxSize)) * boxSize
+                    };
+                    
+                    // Перевірка на змійку
+                    for (let segment of snake) {
+                        if (segment.x === obstacle.x && segment.y === obstacle.y) {
+                            isValidPosition = false;
+                            break;
+                        }
+                    }
+                    
+                    // Перевірка на їжу
+                    if (food.x === obstacle.x && food.y === obstacle.y) {
+                        isValidPosition = false;
+                    }
+                    
+                    // Перевірка на інші перешкоди
+                    for (let existingObstacle of obstacles) {
+                        if (existingObstacle.x === obstacle.x && existingObstacle.y === obstacle.y) {
+                            isValidPosition = false;
+                            break;
+                        }
+                    }
+                    
+                    // Перевірка, щоб не заблокувати весь шлях
+                    if (isValidPosition) {
+                        const freeSpaces = 4 - [
+                            obstacles.some(o => o.x === obstacle.x - boxSize && o.y === obstacle.y),
+                            obstacles.some(o => o.x === obstacle.x + boxSize && o.y === obstacle.y),
+                            obstacles.some(o => o.x === obstacle.x && o.y === obstacle.y - boxSize),
+                            obstacles.some(o => o.x === obstacle.x && o.y === obstacle.y + boxSize)
+                        ].filter(Boolean).length;
+                        
+                        if (freeSpaces < 2) isValidPosition = false;
+                    }
+                } while (!isValidPosition);
+                
+                obstacles.push(obstacle);
+            }
+        }
+        
+        // Малювання гри
+        function draw() {
+            // Очищення canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Малювання перешкод
+            ctx.fillStyle = skins[currentSkin].obstacle;
+            for (let obstacle of obstacles) {
+                ctx.fillRect(obstacle.x, obstacle.y, boxSize, boxSize);
+                ctx.strokeStyle = '#000';
+                ctx.strokeRect(obstacle.x, obstacle.y, boxSize, boxSize);
+            }
+            
+            // Малювання змійки
+            for (let i = 0; i < snake.length; i++) {
+                const segment = snake[i];
+                ctx.fillStyle = i === 0 ? skins[currentSkin].head : skins[currentSkin].body;
+                ctx.fillRect(segment.x, segment.y, boxSize, boxSize);
+                
+                // Очі для голови
+                if (i === 0) {
+                    ctx.fillStyle = 'white';
+                    const eyeSize = 4;
+                    const offset = direction === 'left' ? -2 : direction === 'right' ? 2 : 0;
+                    
+                    if (direction === 'left' || direction === 'right') {
+                        ctx.fillRect(segment.x + boxSize/2 - 6 + offset, segment.y + 5, eyeSize, eyeSize);
+                        ctx.fillRect(segment.x + boxSize/2 + 2 + offset, segment.y + 5, eyeSize, eyeSize);
+                    } else {
+                        ctx.fillRect(segment.x + 5, segment.y + boxSize/2 - 6 + (direction === 'up' ? -2 : 2), eyeSize, eyeSize);
+                        ctx.fillRect(segment.x + 11, segment.y + boxSize/2 - 6 + (direction === 'up' ? -2 : 2), eyeSize, eyeSize);
+                    }
+                }
+            }
+            
+            // Малювання їжі з анімацією
+            ctx.fillStyle = skins[currentSkin].food;
+            ctx.beginPath();
+            ctx.arc(
+                food.x + boxSize/2, 
+                food.y + boxSize/2, 
+                boxSize/2 * (1 + Math.sin(Date.now()/300) * 0.1), 
+                0, 
+                Math.PI * 2
+            );
+            ctx.fill();
+            
+            // Малювання рахунку
+            ctx.fillStyle = 'white';
+            ctx.font = '18px Rajdhani';
+            ctx.fillText(`Рівень ${level}: ${levels[level-1].name}`, 10, 25);
+        }
+        
+        // Оновлення гри
+        function update() {
+            const currentLevel = levels[level - 1];
+            let head = { x: snake[0].x, y: snake[0].y };
+            
+            // Рух голови
+            if (direction === 'right') head.x += boxSize;
+            if (direction === 'left') head.x -= boxSize;
+            if (direction === 'up') head.y -= boxSize;
+            if (direction === 'down') head.y += boxSize;
+            
+            // Перевірка зіткнень зі стінами
+            if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+                gameOver();
+                return;
+            }
+            
+            // Перевірка зіткнень зі своїм тілом
+            for (let i = 1; i < snake.length; i++) {
+                if (head.x === snake[i].x && head.y === snake[i].y) {
+                    gameOver();
+                    return;
+                }
+            }
+            
+            // Перевірка зіткнень з перешкодами
+            for (let obstacle of obstacles) {
+                if (head.x === obstacle.x && head.y === obstacle.y) {
+                    gameOver();
+                    return;
+                }
+            }
+            
+            // Додавання нової голови
+            snake.unshift(head);
+            
+            // Перевірка на збір їжі
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                scoreElement.textContent = score;
+                
+                // Оновлення рекорду
+                if (score > highscore) {
+                    highscore = score;
+                    localStorage.setItem('snakeHighScore', highscore);
+                    highscoreElement.textContent = highscore;
+                }
+                
+                // Перевірка переходу на новий рівень
+                if (score >= level * 50 && level < 10) {
+                    level++;
+                    levelElement.textContent = level;
+                    initGame();
+                    return;
+                } else {
+                    generateFood();
+                }
+            } else {
+                snake.pop();
+            }
+        }
+        
+        function gameOver() {
+            clearInterval(gameInterval);
+            alert(`Game Over! Ваш рахунок: ${score}\nДосягнутий рівень: ${levels[level-1].name}`);
+        }
+        
+        function gameLoop() {
+            update();
+            draw();
+        }
+        
+        function startGame() {
+            initGame();
+            clearInterval(gameInterval);
+            const currentLevel = levels[level - 1];
+            gameInterval = setInterval(gameLoop, currentLevel.speed);
+        }
+        
+        function restartGame() {
+            level = 1;
+            score = 0;
+            scoreElement.textContent = score;
+            levelElement.textContent = level;
+            startGame();
+        }
+        
+        // Обробники подій
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' && direction !== 'down') direction = 'up';
+            if (e.key === 'ArrowDown' && direction !== 'up') direction = 'down';
+            if (e.key === 'ArrowLeft' && direction !== 'right') direction = 'left';
+            if (e.key === 'ArrowRight' && direction !== 'left') direction = 'right';
+        });
+        
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', restartGame);
+        
+        // Обробники вибору скину
+        skinOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                skinOptions.forEach(opt => opt.classList.remove('selected'));
+                option.classList.add('selected');
+                currentSkin = option.dataset.skin;
+                if (gameInterval) draw();
+            });
+        });
+        
+        // Початкова ініціалізація
+        highscoreElement.textContent = highscore;
+        draw();
+    </script>
+</body>
+</html>
